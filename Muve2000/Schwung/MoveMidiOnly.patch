@@ -1,0 +1,49 @@
+--- a/src/vst3/engine.cpp
++++ b/src/vst3/engine.cpp
+@@ -519,7 +519,8 @@
+ 			m_fx_r = (m_fx_r + 1) & IN_MASK;
+ 		}
+ 	}
+-	m_mu->set_external_fx_buses(buses);
++	// The Move generator has no external effect-return inputs.
++	if (fx_buses || !m_direct) m_mu->set_external_fx_buses(buses);
+ 	// A/D INPUT。溜めが空なら無音（入力の変換器の先読みの分だけ、頭が少し欠ける）
+ 	if (m_in_r != m_in_w) {
+ 		m_mu->set_audio_input(m_in_q[m_in_r * 2], m_in_q[m_in_r * 2 + 1]);
+--- a/src/mu2000.cpp
++++ b/src/mu2000.cpp
+@@ -93,14 +93,7 @@
+ 	// パートの音を拾う口（見たいパートが無ければ、渡された所ですぐ帰る）
+ 	for (auto &o : m_scope_owner)
+ 		o.store(-1, std::memory_order_relaxed);
+-	m_swpm.m_voice_tap = &mu2000::scope_tap_fn;
+-	m_swpm.m_voice_tap_ctx = &m_scope_ctx[0];
+-	m_swps.m_voice_tap = &mu2000::scope_tap_fn;
+-	m_swps.m_voice_tap_ctx = &m_scope_ctx[1];
+-	m_swpm.m_meg_tap = &mu2000::scope_meg_fn;
+-	m_swpm.m_meg_tap_ctx = &m_scope_ctx[0];
+-	m_swps.m_meg_tap = &mu2000::scope_meg_fn;
+-	m_swps.m_meg_tap_ctx = &m_scope_ctx[1];
++	// Schwung exposes numeric meters and does not install a waveform scope.
+ 
+ 	build_bus();
+ }
+--- a/src/mame/sound/swp30.cpp
++++ b/src/mame/sound/swp30.cpp
+@@ -3101,15 +3101,7 @@
+ 	m_rec_bus = mixer_out[0x10];   // S-MU2000: 録音はミキサの出力 8 の左（sample_step）
+ 	std::copy(mixer_out.begin() + 0x00, mixer_out.begin() + 0x10, m_melo.begin());
+ 	std::copy(mixer_out.begin() + 0x10, mixer_out.begin() + 0x20, m_meg->m_m.begin() + 0x20);
+-	static constexpr int external_bus_slots[14] = {
+-		0x20, 0x21, 0x24, 0x25, 0x26, 0x27, 0x2c, 0x2d,
+-		0x28, 0x29, 0x2a, 0x2b, 0x2c, 0x2d
+-	};
+-	for(int i = 0; i != 14; i++) {
+-		const int slot = external_bus_slots[i];
+-		m_meg->m_m[slot] = s32(std::clamp<s64>(s64(m_meg->m_m[slot]) + m_external_fx_buses[i],
+-		                                      std::numeric_limits<s32>::min(), std::numeric_limits<s32>::max()));
+-	}
++	// Both Move modules have MIDI inputs only.
+ 	// S-MU2000: 軽量モードでは、エフェクトへの送りを横取りして MEG には渡さない。
+ 	// MEG 側は無音を受けるので、出てくるのはこちらの C++ のエフェクトだけになる
+ 	if(m_native) {

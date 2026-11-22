@@ -1,0 +1,105 @@
+{
+  "title": "Move Canvas MIDI Player",
+  "children": [
+    {
+      "title": "Play a file",
+      "lines": [
+        "Click Open MIDI file.",
+        "Choose a song and",
+        "press Play. Shift and",
+        "Click reads status.",
+        "Shift and Play",
+        "rewinds. Loop",
+        "repeats."
+      ]
+    },
+    {
+      "title": "Render First",
+      "lines": [
+        "Use for dense songs",
+        "and ports A to D.",
+        "Allow time to",
+        "prepare. Play cancels",
+        "preparation. Shift",
+        "and Jog seeks on the",
+        "main menu."
+      ]
+    },
+    {
+      "title": "Live and mixer",
+      "lines": [
+        "Live uses one port.",
+        "Lower pads mute.",
+        "Shift and pad solos.",
+        "Main menu knobs trim",
+        "parts 1 to 8. Shift",
+        "selects 9 to 16.",
+        "Follow Move uses",
+        "Live."
+      ]
+    },
+    {
+      "title": "Exit player",
+      "lines": [
+        "Back hides the tool.",
+        "Shift and Back exits",
+        "and frees its engine."
+      ]
+    },
+    {
+      "title": "Preset bank",
+      "lines": [
+        "Open Preset bank.",
+        "Choose a sound map.",
+        "For an instrument",
+        "choose Programs, a",
+        "family and a sound."
+      ]
+    },
+    {
+      "title": "Drums on channel 3",
+      "lines": [
+        "Choose a drum kit.",
+        "This selects part 10.",
+        "In Part and program",
+        "set Keyboard Routing",
+        "to Selected part. You",
+        "can now play drums on",
+        "channel 3."
+      ]
+    },
+    {
+      "title": "Multitimbral MIDI",
+      "lines": [
+        "In Multitimbral mode",
+        "each keyboard channel",
+        "plays its own part.",
+        "Send drums on channel",
+        "10."
+      ]
+    },
+    {
+      "title": "Edit a control",
+      "lines": [
+        "Jog to a page and",
+        "click. Touch a knob",
+        "to hear its value.",
+        "Turn to edit. Or jog",
+        "to a parameter, click",
+        "and turn Jog. Menu",
+        "goes back."
+      ]
+    },
+    {
+      "title": "Engine in use",
+      "lines": [
+        "Use one Move Canvas",
+        "at a time. Unload the",
+        "generator or exit the",
+        "player with Shift and",
+        "Back. Reopen the one",
+        "you want."
+      ]
+    }
+  ]
+}

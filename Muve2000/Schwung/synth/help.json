@@ -1,0 +1,46 @@
+{
+  "title": "Muve2000",
+  "children": [
+    {
+      "title": "Play a sound",
+      "lines": [
+        "Turn Jog to browse.",
+        "Click for",
+        "Instruments, Drums,",
+        "SFX Kits, Bank",
+        "Variations or",
+        "Settings."
+      ]
+    },
+    {
+      "title": "Edit a part",
+      "lines": [
+        "In Settings choose",
+        "the part, bank or",
+        "octave. Touch a knob",
+        "to hear its value.",
+        "Turn to edit."
+      ]
+    },
+    {
+      "title": "Knobs",
+      "lines": [
+        "Volume, pan, cutoff,",
+        "resonance, attack,",
+        "release, reverb send",
+        "and chorus send."
+      ]
+    },
+    {
+      "title": "Sound data",
+      "lines": [
+        "Copy your MU2000",
+        "program and four wave",
+        "ROMs into the",
+        "generator ROM folder.",
+        "Keep the dump",
+        "subfolder."
+      ]
+    }
+  ]
+}

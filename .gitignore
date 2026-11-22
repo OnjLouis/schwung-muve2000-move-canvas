@@ -1,0 +1,17 @@
+/build*/
+*.so
+*.exe
+*.dll
+*.bin
+*.rom
+*.ic[0-9]*
+*.mid
+*.tar.gz
+*.zip
+**/roms/
+**/runtime/
+__pycache__/
+/private/
+*.ps1
+*[Hh][Aa][Nn][Dd][Oo][Vv][Ee][Rr]*
+*RELEASE-RULES*

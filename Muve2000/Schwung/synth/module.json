@@ -1,0 +1,38 @@
+{
+  "id": "mu2000",
+  "name": "Muve2000",
+  "abbrev": "Muve2K",
+  "version": "0.1.4",
+  "description": "S-MU2000 for Ableton Move. Requires your own compatible ROMs.",
+  "author": "OnjMusic",
+  "license": "BSD-3-Clause",
+  "ui": "ui.js",
+  "ui_chain": "ui.js",
+  "dsp": "dsp.so",
+  "api_version": 2,
+  "assets": {
+    "path": "roms",
+    "label": "MU2000 ROMs",
+    "allowFolders": true,
+    "description": "Use your own compatible S-MU2000 ROM folder, including the dump subfolder."
+  },
+  "capabilities": {
+    "audio_out": true,
+    "midi_in": true,
+    "midi_channels": 16,
+    "chainable": true,
+    "component_type": "sound_generator",
+    "requires_continuous_processing": true,
+    "chain_params": [
+      {"key":"volume","name":"Volume","type":"int","min":0,"max":127,"step":1,"default":100},
+      {"key":"pan","name":"Pan","type":"int","min":0,"max":127,"step":1,"default":64},
+      {"key":"cutoff","name":"Cutoff","type":"int","min":0,"max":127,"step":1,"default":64},
+      {"key":"resonance","name":"Resonance","type":"int","min":0,"max":127,"step":1,"default":64},
+      {"key":"attack","name":"Attack","type":"int","min":0,"max":127,"step":1,"default":64},
+      {"key":"release","name":"Release","type":"int","min":0,"max":127,"step":1,"default":64},
+      {"key":"reverb","name":"Reverb Send","type":"int","min":0,"max":127,"step":1,"default":40},
+      {"key":"chorus","name":"Chorus Send","type":"int","min":0,"max":127,"step":1,"default":0},
+      {"key":"octave","name":"Octave","type":"int","min":-4,"max":4,"step":1,"default":0}
+    ]
+  }
+}

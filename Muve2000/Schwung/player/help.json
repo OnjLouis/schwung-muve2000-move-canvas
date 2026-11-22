@@ -1,0 +1,72 @@
+{
+  "title": "Muve2000 MIDI Player",
+  "children": [
+    {
+      "title": "First song",
+      "lines": [
+        "Choose Open MIDI",
+        "File. Jog to a file",
+        "and click. Press",
+        "Play. Render First",
+        "prepares the song in",
+        "memory."
+      ]
+    },
+    {
+      "title": "Transport",
+      "lines": [
+        "Play to start or",
+        "pause. Shift and Play",
+        "rewinds. Jog seeks 5",
+        "seconds. Shift and",
+        "Jog seeks 30. Loop",
+        "repeats."
+      ]
+    },
+    {
+      "title": "Live or render",
+      "lines": [
+        "Render First prepares",
+        "files under 10",
+        "minutes. Play cancels",
+        "a render. Choose Live",
+        "to edit during",
+        "playback."
+      ]
+    },
+    {
+      "title": "Live edit delay",
+      "lines": [
+        "Live can buffer up to",
+        "six seconds. Shift",
+        "and Click on the",
+        "transport speaks the",
+        "delay. Master level",
+        "and Stop act",
+        "immediately."
+      ]
+    },
+    {
+      "title": "Parts",
+      "lines": [
+        "Open Parts. Shift and",
+        "Jog selects port A to",
+        "D. Pads mute parts.",
+        "Shift and pad solos.",
+        "Knobs trim parts 1 to",
+        "8. Hold Shift for 9",
+        "to 16."
+      ]
+    },
+    {
+      "title": "Exit and ROMs",
+      "lines": [
+        "Back hides the tool.",
+        "Shift and Back exits.",
+        "The player uses the",
+        "generator ROMs via",
+        "roms.txt."
+      ]
+    }
+  ]
+}

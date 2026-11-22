@@ -1,0 +1,15 @@
+{
+  "id": "mu2000-midi-player",
+  "name": "Muve2000 MIDI Player",
+  "abbrev": "Muve2K MIDI",
+  "version": "0.1.10",
+  "description": "Play MIDI files using four ports of S-MU2000.",
+  "author": "OnjMusic",
+  "license": "BSD-3-Clause",
+  "ui": "ui.js",
+  "dsp": "dsp.so",
+  "api_version": 2,
+  "component_type": "tool",
+  "tool_config": { "interactive": true, "skip_file_browser": true },
+  "capabilities": { "audio_out": true, "midi_in": true, "suspend_keeps_js": true, "suspend_self_managed": true }
+}

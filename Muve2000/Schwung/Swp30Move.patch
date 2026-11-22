@@ -1,0 +1,210 @@
+diff --git a/src/mame/sound/swp30.cpp b/src/mame/sound/swp30.cpp
+index 35f5bee..b31e6bd 100644
+--- a/src/mame/sound/swp30.cpp
++++ b/src/mame/sound/swp30.cpp
+@@ -460,103 +460,19 @@ void swp30_device::streaming_block::read_16(memory_access<25, 2, -2, ENDIANNESS_
+ 
+ void swp30_device::streaming_block::read_12(memory_access<25, 2, -2, ENDIANNESS_LITTLE>::cache &wave, s16 &val0, s16 &val1, s16 &val2, s16 &val3)
+ {
+-	// S-MU2000: 逆向きのときは 1 つ手前から読み、step() で並びを裏返す（doc/upstream.md の 35）
+-	s32 spos = m_loop & 0x80000000 ? -m_pos - 1 : m_pos;
+-	offs_t base_address = m_address & 0x1ffffff;
+-	offs_t adr = base_address + (spos >> 3)*3;
+-	switch(spos & 7) {
+-	case 0: {
+-		// 10210210 02102102 21021021 10210210 10210210
+-		// ccbbbaaa ....dddc ........ ........ ........
+-		u32 l0 = wave.read_dword(adr);
+-		u32 l1 = wave.read_dword(adr+1);
+-		val0 =  (l0 & 0x00000fff) << 4;
+-		val1 =  (l0 & 0x00fff000) >> 8;
+-		val2 = ((l0 & 0xff000000) >> 20) | ((l1 & 0x0000000f) << 12);
+-		val3 =   l1 & 0x0000fff0;
+-		break;
+-	}
+-	case 1: {
+-		// 10210210 02102102 21021021 10210210 10210210
+-		// bbaaa... .dddcccb ........ ........ ........
+-		u32 l0 = wave.read_dword(adr);
+-		u32 l1 = wave.read_dword(adr+1);
+-		val0 =  (l0 & 0x00fff000) >> 8;
+-		val1 = ((l0 & 0xff000000) >> 20) | ((l1 & 0x0000000f) << 12);
+-		val2 =   l1 & 0x0000fff0;
+-		val3 =  (l1 & 0x0fff0000) >> 12;
+-		break;
+-	}
+-	case 2: {
+-		// 10210210 02102102 21021021 10210210 10210210
+-		// aa...... dcccbbba ......dd ........ ........
+-		u32 l0 = wave.read_dword(adr);
+-		u32 l1 = wave.read_dword(adr+1);
+-		u32 l2 = wave.read_dword(adr+2);
+-		val0 = ((l0 & 0xff000000) >> 20) | ((l1 & 0x0000000f) << 12);
+-		val1 =   l1 & 0x0000fff0;
+-		val2 =  (l1 & 0x0fff0000) >> 12;
+-		val3 = ((l1 & 0xf0000000) >> 24) | ((l2 & 0x000000ff) << 8);
+-		break;
+-	}
+-	case 3: {
+-		// 10210210 02102102 21021021 10210210 10210210
+-		// ........ cbbbaaa. ...dddcc ........ ........
+-		u32 l1 = wave.read_dword(adr+1);
+-		u32 l2 = wave.read_dword(adr+2);
+-		val0 =   l1 & 0x0000fff0;
+-		val1 =  (l1 & 0x0fff0000) >> 12;
+-		val2 = ((l1 & 0xf0000000) >> 24) | ((l2 & 0x000000ff) << 8);
+-		val3 =  (l2 & 0x000fff00) >> 4;
+-		break;
+-	}
+-	case 4: {
+-		// 10210210 02102102 21021021 10210210 10210210
+-		// ........ baaa.... dddcccbb ........ ........
+-		u32 l1 = wave.read_dword(adr+1);
+-		u32 l2 = wave.read_dword(adr+2);
+-		val0 =  (l1 & 0x0fff0000) >> 12;
+-		val1 = ((l1 & 0xf0000000) >> 24) | ((l2 & 0x000000ff) << 8);
+-		val2 =  (l2 & 0x000fff00) >> 4;
+-		val3 =  (l2 & 0xfff00000) >> 16;
+-		break;
+-	}
+-	case 5: {
+-		// 10210210 02102102 21021021 10210210 10210210
+-		// ........ a....... cccbbbaa .....ddd ........
+-		u32 l1 = wave.read_dword(adr+1);
+-		u32 l2 = wave.read_dword(adr+2);
+-		u32 l3 = wave.read_dword(adr+3);
+-		val0 = ((l1 & 0xf0000000) >> 24) | ((l2 & 0x000000ff) << 8);
+-		val1 =  (l2 & 0x000fff00) >> 4;
+-		val2 =  (l2 & 0xfff00000) >> 16;
+-		val3 =  (l3 & 0x00000fff) << 4;
+-		break;
+-	}
+-	case 6: {
+-		// 10210210 02102102 21021021 10210210 10210210
+-		// ........ ........ bbbaaa.. ..dddccc ........
+-		u32 l2 = wave.read_dword(adr+2);
+-		u32 l3 = wave.read_dword(adr+3);
+-		val0 =  (l2 & 0x000fff00) >> 4;
+-		val1 =  (l2 & 0xfff00000) >> 16;
+-		val2 =  (l3 & 0x00000fff) << 4;
+-		val3 =  (l3 & 0x00fff000) >> 8;
+-		break;
+-	}
+-	case 7: {
+-		// 10210210 02102102 21021021 10210210 10210210
+-		// ........ ........ aaa..... ddcccbbb .......d
+-		u32 l2 = wave.read_dword(adr+2);
+-		u32 l3 = wave.read_dword(adr+3);
+-		u32 l4 = wave.read_dword(adr+4);
+-		val0 =  (l2 & 0xfff00000) >> 16;
+-		val1 =  (l3 & 0x00000fff) << 4;
+-		val2 =  (l3 & 0x00fff000) >> 8;
+-		val3 = ((l3 & 0xff000000) >> 20) | ((l4 & 0x0000000f) << 12);
+-		break;
+-	}
+-	}
++	const s32 spos = m_loop & 0x80000000 ? -m_pos - 1 : m_pos;
++	const offs_t base = (m_address & 0x1ffffff) + (spos >> 3) * 3;
++	const unsigned bit = (spos & 7) * 12;
++	const offs_t addr = base + (bit >> 5);
++	const unsigned shift = bit & 31;
++	u64 packed = u64(wave.read_dword(addr)) | (u64(wave.read_dword(addr + 1)) << 32);
++	packed >>= shift;
++	if (shift > 16)
++		packed |= u64(wave.read_dword(addr + 2)) << (64 - shift);
++	val0 = s16((packed & 0xfff) << 4);
++	val1 = s16((packed >> 8) & 0xfff0);
++	val2 = s16((packed >> 20) & 0xfff0);
++	val3 = s16((packed >> 32) & 0xfff0);
+ 	scale_and_clamp(val0, val1, val2, val3);
+ }
+ 
+@@ -684,16 +600,13 @@ void swp30_device::streaming_block::read_8c(memory_access<25, 2, -2, ENDIANNESS_
+ 		const u32 scale = (m_address >> 27) & 7;
+ 		const s32 limit = max_value[scale];
+ 		s32 spos =  m_dpcm_pos;
+-		base_address += spos >> 2;
+-		u32 cv = wave.read_dword(base_address);
+-		while(spos != m_pos + 4) {
+-			u8 input = cv >> ((spos & 3) << 3);
+-			dpcm_step(input, mode, scale, limit);
+-			spos++;
+-			if((spos & 3) == 0) {
+-				base_address ++;
+-				cv = wave.read_dword(base_address);
+-			}
++		const s32 end = m_pos + 4;
++		while (spos != end) {
++			const u32 word = wave.read_dword(base_address + (spos >> 2));
++			do {
++				dpcm_step(u8(word >> ((spos & 3) << 3)), mode, scale, limit);
++				++spos;
++			} while (spos != end && (spos & 3));
+ 		}
+ 		m_dpcm_pos = spos;
+ 	}
+@@ -3066,7 +2979,14 @@ void swp30_device::mixer_rebuild()
+ 	m_mix_dirty[0] = m_mix_dirty[1] = 0;
+ 	// 振り分け先の無い入力は mixer_step で見ない
+ 	m_mix_nactive = 0;
+-	for(int mix = 0; mix != 0x60; mix++)
++	m_mix_routed_voices = 0;
++	for(int mix = 0; mix != 0x40; mix++)
++		if(m_mix_ntaps[mix]) {
++			m_mix_routed_voices |= u64(1) << mix;
++			m_mix_active[m_mix_nactive++] = u8(mix);
++		}
++	m_mix_first_bus = m_mix_nactive;
++	for(int mix = 0x40; mix != 0x60; mix++)
+ 		if(m_mix_ntaps[mix])
+ 			m_mix_active[m_mix_nactive++] = u8(mix);
+ }
+@@ -3079,24 +2999,20 @@ void swp30_device::mixer_step(const std::array<s32, 0x40> &samples_per_chan)
+ 	std::array<s32, 0x20> mixer_out;
+ 	std::fill(mixer_out.begin(), mixer_out.end(), 0);
+ 
+-	for(int ai = 0; ai != m_mix_nactive; ai++) {
+-		const int mix = m_mix_active[ai];
+-		const int n = m_mix_ntaps[mix];
+-
+-		s32 input;
+-		if(mix < 0x40)
+-			input = samples_per_chan[mix];
+-		else if(mix < 0x50)
+-			input = m_meg->m_m[0x20 | (mix & 0xf)];
+-		else
+-			input = m_meli[mix & 0xf];
+-
++	const auto add_input = [&](int mix, s32 input) {
+ 		if(input == 0)
+-			continue;
+-
++			return;
+ 		const mix_tap *t = m_mix_taps[mix].data();
+-		for(int i = 0; i != n; i++)
++		for(int i = 0, n = m_mix_ntaps[mix]; i != n; i++)
+ 			mixer_out[t[i].dst] += (input - ((input * t[i].frac) >> 5)) >> t[i].shift;   // mixer_att と同じ
++	};
++	for(u64 routed = m_mix_routed_voices & ~m_awm_idle; routed; routed &= routed - 1) {
++		const int mix = std::countr_zero(routed);
++		add_input(mix, samples_per_chan[mix]);
++	}
++	for(int ai = m_mix_first_bus; ai != m_mix_nactive; ai++) {
++		const int mix = m_mix_active[ai];
++		add_input(mix, mix < 0x50 ? m_meg->m_m[0x20 | (mix & 0xf)] : m_meli[mix & 0xf]);
+ 	}
+ 	m_rec_bus = mixer_out[0x10];   // S-MU2000: 録音はミキサの出力 8 の左（sample_step）
+ 	std::copy(mixer_out.begin() + 0x00, mixer_out.begin() + 0x10, m_melo.begin());
+diff --git a/src/mame/sound/swp30.h b/src/mame/sound/swp30.h
+index dc1ff82..c22b386 100644
+--- a/src/mame/sound/swp30.h
++++ b/src/mame/sound/swp30.h
+@@ -527,6 +527,8 @@ private:
+ 	std::array<u8, 0x60> m_mix_ntaps = {};
+ 	std::array<u8, 0x60> m_mix_active = {};   // S-MU2000: 振り分け先のある入力の番号（mixer_rebuild が詰める）
+ 	u8 m_mix_nactive = 0;
++	u64 m_mix_routed_voices = 0;
++	u8 m_mix_first_bus = 0;
+ 	u64 m_mix_dirty[2] = { ~u64(0), ~u64(0) };   // 作り直す入力の印（0x00-0x3f、0x40-0x5f）
+ 	void mixer_rebuild();
+ 	void mixer_mark(int mix) { if(mix < 0x60) m_mix_dirty[mix >> 6] |= u64(1) << (mix & 63); }
