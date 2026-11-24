@@ -4,7 +4,9 @@ Play Yamaha MU2000 or Roland Sound Canvas arrangements on Move. Each instrument 
 
 ## Download and install
 
-Download the paired **Muve2000-and-Move-Canvas-0.1.0.tar.gz** archive. It contains all four ready-built ARM64 modules. Bundle version 0.1.0 includes Muve2000 generator 0.1.4, Muve2000 MIDI Player 0.1.10, and Move Canvas generator and player 0.1.1. [Download the first release](https://github.com/OnjLouis/schwung-muve2000-move-canvas/releases/tag/v0.1.0)
+Download **Muve2000-and-Move-Canvas-0.1.1.tar.gz** for the public preview. It includes Muve2000 generator 0.1.7, Muve2000 MIDI Player 0.1.11 and Move Canvas generator and player 0.1.3. [Download the 0.1.1 preview](https://github.com/OnjLouis/schwung-muve2000-move-canvas/releases/tag/v0.1.1) · [Previous stable release](https://github.com/OnjLouis/schwung-muve2000-move-canvas/releases/tag/v0.1.0)
+
+Live generators default to **Fast** pad response. Muve2000 can occasionally crackle in a busy set. Choose **Settings → Pad response → Buffered** for more headroom. A four-track set with a native instrument, Hypersonic, Move Canvas and Muve2000 played on hardware. During testing the device also ran out of memory and stopped the audio host. Save before loading more large instruments or sample banks. **Buffered** helps with audio timing.
 
 1. Install Schwung on Move and set up SFTP access. If you already run Schwung instruments, use your existing connection. [Schwung setup and file transfer](https://github.com/charlesvestal/schwung#installation)
 2. Follow the installation guide to merge the modules into the device and add your own sound data. Muve2000 reads a MU2000 firmware and wave-ROM set. Move Canvas loads a supported **32-bit** Sound Canvas VA engine and its compatibility files. [Install, update or remove the instruments](docs/Installation.md)

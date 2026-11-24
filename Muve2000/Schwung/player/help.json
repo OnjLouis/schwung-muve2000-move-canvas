@@ -67,6 +67,17 @@
         "generator ROMs via",
         "roms.txt."
       ]
+    },
+    {
+      "title": "Back in menus",
+      "lines": [
+        "Click the Back row to",
+        "go up one level. In",
+        "the file browser,",
+        "Back returns to the",
+        "parent folder or the",
+        "player menu."
+      ]
     }
   ]
 }

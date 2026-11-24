@@ -46,9 +46,23 @@ const row = (text, run, value = () => '', edit = '') => ({ text, run, value, edi
 const flag = key => on(key) ? 'On' : 'Off';
 const renderPercent = (elapsed, duration) => duration > 0 ? limit(Math.floor(100 * elapsed / duration), 0, 99) : 0;
 
+function refreshFiles() {
+    refreshFilepathBrowser(browser, fs);
+    const parent = browser.items.find(item => item.kind === 'up');
+    if (parent) parent.label = 'Back';
+    else browser.items.push({kind:'exit', label:'Back'});
+}
+function activateFile() {
+    const current = browser.items[browser.selectedIndex];
+    if (current?.kind === 'exit') { back(); return {action:'exit'}; }
+    const previous = browser.currentDir;
+    const result = activateFilepathBrowserItem(browser);
+    if (current?.kind === 'up') browser.selectedPath = previous;
+    return result;
+}
 function browse() {
     browser = buildFilepathBrowserState({ root, filter: ['.mid', '.midi', '.kar'], name: 'MIDI Files', start_path: lastFolder }, '');
-    refreshFilepathBrowser(browser, fs);
+    refreshFiles();
     screen = 'files';
     announce('Open MIDI File. ' + label(browser.items[browser.selectedIndex]));
 }
@@ -93,16 +107,17 @@ function seek(seconds) {
     announce(to === 0 ? 'Start of file' : spokenTime(to * 1000));
 }
 function show(next) { screen = next; selected = 0; editing = false; }
+const backRow = row('Back', () => { back(); return false; });
 function onScreenRows() {
     if (screen === 'parts') return Array.from({ length: partsPerPort }, (_, n) =>
         row(partName(n), () => { part = n; show('part'); }, () => on('mute:' + partId(n)) ? 'Muted' :
-            on('solo:' + partId(n)) ? 'Solo' : on('used:' + partId(n)) ? 'Used' : ''));
+            on('solo:' + partId(n)) ? 'Solo' : on('used:' + partId(n)) ? 'Used' : '')).concat(backRow);
     if (screen === 'part') {
         const i = partId(part);
         return [
             row('Mute', () => toggle('mute:' + i), () => flag('mute:' + i)),
             row('Solo', () => toggle('solo:' + i), () => flag('solo:' + i)),
-            row('Level trim', () => { editing = !editing; }, () => number('trim:' + i) + ' percent', 'trim:' + i)
+            row('Level trim', () => { editing = !editing; }, () => number('trim:' + i) + ' percent', 'trim:' + i), backRow
         ];
     }
     return [
@@ -124,7 +139,7 @@ function onScreenRows() {
             setAndRead('playback_mode', mode);
             if (get('playback_mode') !== mode) { announce(get('status')); return false; }
             if (mode === 'live') setAndRead('render_live', 1);
-        }, () => renderFirst() ? 'Render First' : 'Live')
+        }, () => renderFirst() ? 'Render First' : 'Live'), backRow
     ];
 }
 function sayRow() {
@@ -135,7 +150,12 @@ function back() {
     if (editing) { editing = false; sayRow(); }
     else if (screen === 'part') { show('parts'); selected = part; sayRow(); }
     else if (screen === 'menu') { show('home'); announce(state()); }
-    else { show('menu'); sayRow(); }
+    else {
+        const fromParts = screen === 'parts';
+        show('menu');
+        if (fromParts) selected = onScreenRows().findIndex(item => item.text === 'Parts');
+        sayRow();
+    }
 }
 function draw() {
     clear_screen();
@@ -250,9 +270,9 @@ function onMidiMessageInternal(data) {
             announce(label(browser.items[browser.selectedIndex]));
         } else if (key === cc.menu && v) back();
         else if (key === cc.click && v) {
-            const result = activateFilepathBrowserItem(browser);
+            const result = activateFile();
             if (result.action === 'open') {
-                refreshFilepathBrowser(browser, fs);
+                refreshFiles();
                 announce(label(browser.items[browser.selectedIndex]));
             } else if (result.action === 'select') {
                 lastFolder = result.value.slice(0, result.value.lastIndexOf('/')) || root;

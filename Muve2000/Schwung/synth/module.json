@@ -2,7 +2,7 @@
   "id": "mu2000",
   "name": "Muve2000",
   "abbrev": "Muve2K",
-  "version": "0.1.4",
+  "version": "0.1.7",
   "description": "S-MU2000 for Ableton Move. Requires your own compatible ROMs.",
   "author": "OnjMusic",
   "license": "BSD-3-Clause",

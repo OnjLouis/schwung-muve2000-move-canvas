@@ -46,7 +46,7 @@ for tool in (False, True):
     target = args.output / ("tools" if tool else "sound_generators") / ident
     target.mkdir(parents=True, exist_ok=True)
     caps = dict(audio_out=True, midi_in=True)
-    manifest = dict(id=ident, name=name, abbrev="MC MIDI" if tool else "MCanvas", version="0.1.1",
+    manifest = dict(id=ident, name=name, abbrev="MC MIDI" if tool else "MCanvas", version="0.1.3",
                     author="OnjMusic", ui="ui.js", dsp="dsp.so", api_version=2, capabilities=caps)
     if tool:
         manifest.update(component_type="tool", tool_config=dict(interactive=True, skip_file_browser=True))
@@ -55,7 +55,7 @@ for tool in (False, True):
         manifest.update(ui_chain="ui.js")
         caps.update(midi_channels=16, chainable=True, component_type="sound_generator", requires_continuous_processing=True)
         order = main_knobs + [i for i in range(len(controls)) if i not in main_knobs]
-        caps["chain_params"] = [dict(key=k,name=n,type="int",min=lo,max=hi,default=d,step=1)
+        caps["chain_params"] = [dict(key=k,name=n,type="int",min=lo,max=hi,default=1 if k=="routing" else d,step=1)
                                 for i in order for k,n,lo,hi,d,_ in [controls[i]]]
     (target / "module.json").write_text(json.dumps(manifest,indent=2)+"\n",encoding="utf8")
     metadata = dict(tool=tool, controls=controls, programs=programs, types=types, pages=pages, knobs=main_knobs)

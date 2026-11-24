@@ -4,22 +4,22 @@
     {
       "title": "Play a sound",
       "lines": [
-        "Turn Jog to browse.",
-        "Click for",
-        "Instruments, Drums,",
-        "SFX Kits, Bank",
-        "Variations or",
-        "Settings."
+        "Choose Instruments,",
+        "Drums or SFX Kits.",
+        "Turn Jog to hear each",
+        "sound as you play.",
+        "Click Back to return",
+        "to the same category."
       ]
     },
     {
       "title": "Edit a part",
       "lines": [
-        "In Settings choose",
-        "the part, bank or",
-        "octave. Touch a knob",
-        "to hear its value.",
-        "Turn to edit."
+        "Edit part follows the",
+        "track channel. Open",
+        "Settings to pin a",
+        "part, change bank or",
+        "set the octave."
       ]
     },
     {
@@ -40,6 +40,26 @@
         "generator ROM folder.",
         "Keep the dump",
         "subfolder."
+      ]
+    },
+    {
+      "title": "Bank Variations",
+      "lines": [
+        "Choose a program,",
+        "then Bank Variations",
+        "to browse its other",
+        "voices."
+      ]
+    },
+    {
+      "title": "Pad response",
+      "lines": [
+        "In Settings, Pad",
+        "response starts on",
+        "Fast for live",
+        "playing. Choose",
+        "Buffered if a busy",
+        "patch crackles."
       ]
     }
   ]

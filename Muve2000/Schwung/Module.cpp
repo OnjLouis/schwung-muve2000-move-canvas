@@ -57,6 +57,7 @@ constexpr unsigned initialFileBlocks = sampleRate / MOVE_FRAMES_PER_BLOCK;
 constexpr unsigned queueCapacity = std::max(renderAhead, liveFileBlocks);
 #else
 constexpr unsigned queueCapacity = renderAhead;
+constexpr unsigned fastPadBlocks = std::min(3u, renderAhead);
 #endif
 constexpr int edgeFrames = 32;
 constexpr auto knobs = std::to_array<std::pair<std::string_view, uint8_t>>({
@@ -144,7 +145,13 @@ struct Instance {
     std::array<MixPart, midiPorts * midiParts> mix{};
     uint64_t seekTarget = 0;
     unsigned peakHold = 0, budgetBlocks = 0, budgetGaps = 0, overloadWindows = 0;
-    std::atomic<int> part{0}, octave{0};
+    inline static std::atomic<unsigned> nextEditorId{1};
+    const unsigned editorId = nextEditorId.fetch_add(1);
+    std::atomic<int> part{0}, octave{0}, trackChannel{-1};
+    std::atomic<bool> followTrack{true};
+#if !MU2000_PLAYER
+    std::atomic<bool> fastPads{true};
+#endif
     struct Part {
         std::atomic<unsigned> address{0};
         std::array<std::atomic<unsigned>, 3> lastGroup{defaultGroups[0], defaultGroups[1], defaultGroups[2]};
@@ -546,7 +553,7 @@ void* create(const char*, const char*) {
         if (instance->synchronousProbe) return instance.release();
 #endif
         instance->worker = std::jthread([state = instance.get()](std::stop_token stop) {
-#if defined(__linux__) && defined(MU2000_PLAYER)
+#if defined(__linux__)
             pthread_setname_np(pthread_self(), "mu2000-render");
             mu_player::WorkerPolicy policy;
 #endif
@@ -608,9 +615,10 @@ void* create(const char*, const char*) {
                 const auto read = state->audioRead.load(std::memory_order_acquire);
                 const auto depth =
 #if MU2000_PLAYER
-                    state->playing.load() ? liveFileBlocks :
+                    state->playing.load() ? liveFileBlocks : renderAhead;
+#else
+                    state->fastPads.load() ? fastPadBlocks : renderAhead;
 #endif
-                    renderAhead;
                 if (state->engine.state() != status::ready || write - read >= depth) {
                     std::this_thread::sleep_for(std::chrono::microseconds(250));
                     continue;
@@ -648,7 +656,7 @@ void* create(const char*, const char*) {
                 } else --state->peakHold;
 #endif
                 state->audioWrite.store(write + 1, std::memory_order_release);
-                if (write >= renderAhead - 1) state->activated.store(true, std::memory_order_release);
+                if (write >= std::min(depth, renderAhead) - 1) state->activated.store(true, std::memory_order_release);
             }
         });
         return instance.release();
@@ -663,6 +671,11 @@ void incoming(void* object, const uint8_t* data, int size, int source) {
 #endif
     auto& instance = *static_cast<Instance*>(object);
     const auto write = instance.midiWrite.load(std::memory_order_relaxed);
+#if !MU2000_PLAYER
+    if (instance.followTrack && instance.trackChannel < 0 && size == 3 &&
+        (data[0] & 0xf0) == 0x90 && data[2])
+        instance.part = data[0] & 15;
+#endif
     const auto read = instance.midiRead.load(std::memory_order_acquire);
     auto& slot = instance.queue[write % queuedMidi];
     if (write - read >= queuedMidi || size_t(size) > slot.data.size()) {
@@ -732,11 +745,10 @@ void selectAddress(Instance::Part& part, unsigned address) {
 }
 
 // Use the same ROM lookup as Desktop and skip aliases of the same voice.
-void browseVariations(Instance& instance, Instance::Part& part, int delta) {
+std::vector<unsigned> variationAddresses(Instance& instance, unsigned address) {
     const auto rom = voiceRom();
-    if (!rom.ok()) return;
+    if (!rom.ok()) return {};
     const auto mode = instance.voiceMode.load();
-    const auto address = part.address.load();
     const int pc = int(address & 127);
     const int voiceMode = int(mode >> 8), voiceSet = int(mode & 255);
     std::unordered_set<u32> seen;
@@ -752,6 +764,12 @@ void browseVariations(Instance& instance, Instance::Part& part, int delta) {
             choices.push_back(unsigned(msb << 14 | lsb << 7 | pc));
         }
     }
+    return choices;
+}
+
+void browseVariations(Instance& instance, Instance::Part& part, int delta) {
+    const auto address = part.address.load();
+    const auto choices = variationAddresses(instance, address);
     if (choices.empty()) return;
     const auto current = std::find(choices.begin(), choices.end(), address);
     const int index = current == choices.end() ? (delta > 0 ? -1 : int(choices.size())) : int(current - choices.begin());
@@ -795,8 +813,14 @@ bool fromHex(std::string_view& remaining, size_t width, unsigned maximum, unsign
 }
 
 void restoreState(Instance& instance, std::string_view state) {
+#if !MU2000_PLAYER
+    const bool buffered = state.ends_with("~B");
+    if (buffered) state.remove_suffix(2);
+#endif
     const bool oldVersion = state.starts_with("MU1:");
-    if (!oldVersion && !state.starts_with(stateVersion)) return;
+    const bool automatic = state.starts_with("MUF:");
+    const bool manual = state.starts_with("MUM:");
+    if (!oldVersion && !automatic && !manual && !state.starts_with(stateVersion)) return;
     state.remove_prefix(stateVersion.size());
     constexpr unsigned maxAddress = (1u << 21) - 1;
     const size_t header = oldVersion ? 2 : 3;
@@ -830,13 +854,22 @@ void restoreState(Instance& instance, std::string_view state) {
             if (part.values[k].exchange(parts[i].values[k]) != parts[i].values[k]) changed |= 1u << k;
         if (changed) part.dirty.fetch_or(changed);
     }
-    instance.part = int(active);
+#if !MU2000_PLAYER
+    instance.fastPads = !buffered;
+#endif
+    instance.followTrack = automatic || (!manual && active == 0);
+    instance.part = instance.followTrack && instance.trackChannel >= 0 ? instance.trackChannel.load() : int(active);
     instance.octave = int(octave) - octaveLimit;
 }
 
 int saveState(const Instance& instance, char* out, int capacity) {
-    std::array<char, stateVersion.size() + 3 + midiParts * midiPorts * stateRecord> buffer{};
-    char* next = std::copy(stateVersion.begin(), stateVersion.end(), buffer.begin());
+    std::array<char, stateVersion.size() + 5 + midiParts * midiPorts * stateRecord> buffer{};
+#if MU2000_PLAYER
+    const auto prefix = stateVersion;
+#else
+    const std::string_view prefix = instance.followTrack ? "MUF:" : "MUM:";
+#endif
+    char* next = std::copy(prefix.begin(), prefix.end(), buffer.begin());
     const auto append = [&](unsigned value, size_t width) {
         constexpr std::string_view hex = "0123456789abcdef";
         for (size_t i = width; i > 0; --i) *next++ = hex[(value >> ((i - 1) * 4)) & 15u];
@@ -856,6 +889,9 @@ int saveState(const Instance& instance, char* out, int capacity) {
         for (unsigned group : data.groups) append(group, 6);
         for (int value : data.values) append(unsigned(value), 2);
     }
+#if !MU2000_PLAYER
+    if (!instance.fastPads) { *next++ = '~'; *next++ = 'B'; }
+#endif
     const auto size = next - buffer.data();
     if (!out || capacity <= size) return -1;
     std::copy_n(buffer.data(), size, out);
@@ -1028,12 +1064,31 @@ void set(void* object, const char* name, const char* value) {
         }
         int number = 0;
         const auto [end, error] = std::from_chars(text.data(), text.data() + text.size(), number);
+        if (key == "voice_address") {
+            if (error == std::errc{} && end == text.data() + text.size() && number >= 0 && number < (1 << 21))
+                selectAddress(instance.parts[size_t(instance.part.load())], unsigned(number));
+            return;
+        }
         if (error != std::errc{} || number < -127 || number > 127) return;
         const auto fraction = std::string_view(end, text.data() + text.size());
         if (!fraction.empty() && (!fraction.starts_with('.') || fraction.size() == 1 ||
             !std::all_of(fraction.begin() + 1, fraction.end(), [](char c) { return c == '0'; }))) return;
+#if !MU2000_PLAYER
+        if (key == "fast_pads" && (number == 0 || number == 1)) { instance.fastPads = number == 1; return; }
+#endif
         if (key == "octave") {
             if (number >= -octaveLimit && number <= octaveLimit) instance.octave = number;
+            return;
+        }
+        if (key == "track_channel" && number >= -1 && number < midiParts) {
+            instance.trackChannel = number;
+            if (instance.followTrack && number >= 0) instance.part = number;
+            return;
+        }
+        if (key == "edit_target" && number >= -1 && number < midiPorts * midiParts) {
+            instance.followTrack = number < 0;
+            if (number >= 0) instance.part = number;
+            else if (instance.trackChannel >= 0) instance.part = instance.trackChannel.load();
             return;
         }
         auto& part = instance.parts[size_t(instance.part.load())];
@@ -1055,7 +1110,7 @@ void set(void* object, const char* name, const char* value) {
 #if MU2000_PLAYER
         if (key == "master" && number >= 0 && number <= maxTrim) { instance.master = number; return; }
 #endif
-        if (key == "part" && number < midiPorts * midiParts) { instance.part = number; return; }
+        if (key == "part" && number < midiPorts * midiParts) { instance.followTrack = false; instance.part = number; return; }
         const int shift = key == "bank" ? 14 : key == "lsb" ? 7 : key == "program" ? 0 : -1;
         if (shift >= 0) {
             const unsigned address = part.address.load();
@@ -1150,7 +1205,12 @@ int get(void* object, const char* name, char* out, int capacity) {
     if (key == "underruns") return reply(std::to_string(instance.underruns.load()), out, capacity);
     if (key == "clipped_samples") return reply(std::to_string(instance.clipped.load()), out, capacity);
     if (key == "midi_drops") return reply(std::to_string(instance.midiDrops.load()), out, capacity);
+#if !MU2000_PLAYER
+    if (key == "fast_pads") return reply(instance.fastPads ? "1" : "0", out, capacity);
+    if (key == "buffer_frames") return reply(std::to_string((instance.fastPads ? fastPadBlocks : renderAhead) * MOVE_FRAMES_PER_BLOCK), out, capacity);
+#else
     if (key == "buffer_frames") return reply(std::to_string(renderAhead * MOVE_FRAMES_PER_BLOCK), out, capacity);
+#endif
     if (key == "loaded") { const std::lock_guard lock(instance.songMutex); return reply(instance.song.name, out, capacity); }
     if (key == "status") {
         const std::lock_guard lock(instance.songMutex);
@@ -1165,8 +1225,29 @@ int get(void* object, const char* name, char* out, int capacity) {
     }
     if (key == "part") return reply(std::to_string(instance.part.load()), out, capacity);
     if (key == "octave") return reply(std::to_string(instance.octave.load()), out, capacity);
+    if (key == "editor_instance") return reply("mu" + std::to_string(instance.editorId), out, capacity);
+    if (key == "edit_target") return reply(std::to_string(instance.followTrack ? -1 : instance.part.load()), out, capacity);
     const auto& part = instance.parts[size_t(instance.part.load())];
     const auto address = part.address.load();
+    if (key.starts_with("patch_rows:") || key.starts_with("variation_rows:")) {
+        const bool variations = key.starts_with("variation_rows:");
+        const auto offset = key.substr(key.find(':') + 1);
+        unsigned start = 0;
+        const auto result = std::from_chars(offset.data(), offset.data() + offset.size(), start);
+        if (result.ec != std::errc{} || result.ptr != offset.data() + offset.size()) return -1;
+        const auto rom = voiceRom();
+        const auto choices = variations ? variationAddresses(instance, address) : std::vector<unsigned>{};
+        const unsigned size = variations ? unsigned(choices.size()) : 128;
+        std::string rows;
+        // Small pages fit the host's parameter-response buffer, including long voice names.
+        for (unsigned n = start; n < size && n - start < 8; ++n) {
+            const auto a = variations ? choices[n] : ((address & ~127u) | n);
+            const auto label = patchName(rom, instance.voiceMode.load(), int(a >> 14), int((a >> 7) & 127), int(a & 127));
+            if (!label.empty()) rows += std::to_string(variations ? a : n) + "\t" + label + "\n";
+        }
+        if (start < size && size - start > 8) rows += "+";
+        return reply(rows, out, capacity);
+    }
     if (key == "bank") return reply(std::to_string(address >> 14), out, capacity);
     if (key == "lsb") return reply(std::to_string((address >> 7) & 127), out, capacity);
     if (key == "program") return reply(std::to_string(address & 127), out, capacity);

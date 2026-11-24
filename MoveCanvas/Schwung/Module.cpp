@@ -16,6 +16,7 @@
 namespace {
 using namespace scbridge;
 constexpr unsigned hostFrames = MOVE_FRAMES_PER_BLOCK, quantum = 2 * hostFrames;
+constexpr unsigned fastPadBlocks = 5;
 constexpr unsigned queueBlocks = 8, midiCapacity = 131072;
 constexpr unsigned rate = MOVE_SAMPLE_RATE;
 using Audio = std::array<int16_t, hostFrames * 2>;
@@ -128,6 +129,12 @@ struct MidiStream {
 struct Instance {
     std::filesystem::path runtime;
     bool tool;
+    inline static std::atomic<unsigned> nextEditorId{1};
+    const unsigned editorId = nextEditorId.fetch_add(1);
+    bool followTrack = true, browsingKit = false;
+    int trackChannel = -1, melodicPart = 0;
+    std::atomic<bool> fastPads{true};
+    std::atomic<int> incomingChannel{-1};
     std::atomic<bool> quit{false}, ready{false}, active{false}, usb{true}, loop{false};
     std::atomic<unsigned> audioRead{0}, audioWrite{0}, gaps{0}, drops{0};
     std::array<Audio, queueBlocks> audio{};
@@ -154,6 +161,7 @@ struct Instance {
     Instance(const std::filesystem::path &path, bool player) : runtime(path), tool(player) {
         for (unsigned i = 0; i < parameterCount; ++i)
             values[i] = controls[i].initial;
+        if (!tool) values[15] = 1; // A keyboard plays the part being edited, including drum kits.
         for (auto &trim : trims)
             trim.store(100);
         if (tool) {
@@ -377,8 +385,10 @@ void Instance::run() {
     while (!quit.load()) {
         saveSettings();
         const auto write = audioWrite.load();
-        if (write - audioRead.load(std::memory_order_acquire) > queueBlocks - quantum / hostFrames) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        const bool fast = !tool && fastPads.load(std::memory_order_relaxed);
+        const auto depth = fast ? fastPadBlocks : queueBlocks;
+        if (write - audioRead.load(std::memory_order_acquire) > depth - quantum / hostFrames) {
+            std::this_thread::sleep_for(std::chrono::microseconds(fast ? 250 : 1000));
             continue;
         }
         std::string path;
@@ -405,6 +415,11 @@ void Instance::run() {
                 p.restoredScene = *restore;
                 p.restoreSceneValid = p.reset = 1;
                 restore.reset();
+            }
+            const int heard = incomingChannel.exchange(-1);
+            if (!tool && followTrack && !browsingKit && trackChannel < 0 && heard >= 0 && values[0] != heard) {
+                values[0] = heard;
+                ++changes[0];
             }
             std::copy(values.begin(), values.end(), p.parameters);
             std::copy(changes.begin(), changes.end(), p.generations);
@@ -601,7 +616,12 @@ void Instance::run() {
         }
         const bool edited = !std::equal(std::begin(p.generations), std::end(p.generations), applied.begin());
         const bool waking = p.eventCount || edited || play || targetMs >= 0 || resetting;
-        p.stateEpoch = (edited || resetting || (++snapshotBlock % 8) == 1) ? 1 : 0;
+        const bool setupMidi = fast && std::any_of(p.events, p.events + p.eventCount, [&](const Event &e) {
+            const auto type = p.midi[e.position] & 0xf0;
+            return type != 0x80 && type != 0x90 && type != 0xa0 && type != 0xd0 && type != 0xe0;
+        });
+        p.stateEpoch = edited || resetting || setupMidi || (++snapshotBlock % (fast ? 32u : 8u) == 1);
+        const bool notesOnly = fast && !p.stateEpoch;
         if (waking)
             silentBlocks = 0;
         if (silentBlocks >= rate / quantum && !waking) {
@@ -610,7 +630,7 @@ void Instance::run() {
             continue;
         }
         std::copy(std::begin(p.generations), std::end(p.generations), applied.begin());
-        if (!engine.render('P')) {
+        if (!engine.render('P', notesOnly)) {
             setStatus("Engine stopped responding");
             return;
         }
@@ -641,7 +661,7 @@ void Instance::run() {
 std::string state(const Instance &i) {
     if (!i.scene)
         return {};
-    std::string result = "SC2";
+    std::string result = i.tool ? "SC2" : i.followTrack ? (i.browsingKit ? "SCK" : "SCF") : i.browsingKit ? std::string("SK") + "0123456789ABCDEF"[i.melodicPart] : "SCM";
     constexpr std::string_view digits = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
     uint32_t bits = 0;
     int pending = 0;
@@ -660,11 +680,18 @@ std::string state(const Instance &i) {
         put(data[n]);
     if (pending)
         result += digits[(bits << (6 - pending)) & 63];
+    if (!i.tool && !i.fastPads) result += "~B";
     return result;
 }
 void recall(Instance &i, std::string_view text) {
     std::array<uint8_t, parameterCount + sizeof(EngineScene)> data{};
-    if (text.size() != 3 + (data.size() * 8 + 5) / 6 || !text.starts_with("SC2"))
+    const bool buffered = text.ends_with("~B");
+    if (buffered) text.remove_suffix(2);
+    const auto prefix = text.substr(0, 3);
+    constexpr std::string_view hex = "0123456789ABCDEF";
+    const auto kitPart = prefix.size() == 3 && prefix.starts_with("SK") ? hex.find(prefix[2]) : hex.npos;
+    if (text.size() != 3 + (data.size() * 8 + 5) / 6 ||
+        (prefix != "SC2" && prefix != "SCF" && prefix != "SCM" && prefix != "SCK" && kitPart == hex.npos))
         return;
     constexpr std::string_view digits = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
     uint32_t bits = 0;
@@ -694,6 +721,13 @@ void recall(Instance &i, std::string_view text) {
         i.values[n] = data[n];
         ++i.changes[n];
     }
+    i.followTrack = prefix == "SCF" || prefix == "SCK" || (prefix == "SC2" && data[0] == 0);
+    i.browsingKit = prefix == "SCK" || kitPart != hex.npos;
+    i.melodicPart = kitPart != hex.npos ? int(kitPart) : data[0];
+    if (!i.tool && i.followTrack && !i.browsingKit && i.trackChannel >= 0)
+        i.values[0] = i.trackChannel;
+    i.fastPads = !buffered;
+    i.scene = scene; // Keep a valid saved scene available while the worker restores it.
     i.restore = scene;
 }
 
@@ -702,7 +736,7 @@ void set(void *object, const char *key, const char *value) {
         return;
     auto &i = *static_cast<Instance *>(object);
     std::string_view k(key);
-    int v = number(value);
+    int v = number(value, -128);
     if (k == "file_path" && i.tool) {
         if (std::string_view(value) == "__test_bus__")
             return;
@@ -813,12 +847,31 @@ void set(void *object, const char *key, const char *value) {
         i.values[n] = x;
         ++i.changes[n];
     };
+    if (!i.tool && k == "fast_pads" && (v == 0 || v == 1)) {
+        i.fastPads = v == 1;
+        return;
+    }
+    if (!i.tool && k == "track_channel" && v >= -1 && v < 16) {
+        i.trackChannel = v;
+        if (i.followTrack && !i.browsingKit && v >= 0 && i.values[0] != v) change(0, v);
+        return;
+    }
+    if (!i.tool && k == "edit_target" && v >= -1 && v < 16) {
+        i.followTrack = v < 0;
+        i.browsingKit = false;
+        if (v >= 0 || i.trackChannel >= 0) change(0, v >= 0 ? v : i.trackChannel);
+        return;
+    }
     if (k == "preset" && v >= 0 && size_t(v) < catalogueCount) {
         const auto &entry = programCatalogue[v];
+        if (!i.browsingKit) i.melodicPart = i.values[0];
+        i.browsingKit = entry.drums;
         if (entry.drums)
             change(0, 9);
+        else if (!i.tool && i.followTrack && i.trackChannel >= 0)
+            change(0, i.trackChannel);
         else if (i.values[0] == 9)
-            change(0, 0);
+            change(0, i.tool ? 0 : i.melodicPart);
         change(1, entry.map);
         change(2, entry.bank);
         change(3, entry.program);
@@ -828,6 +881,7 @@ void set(void *object, const char *key, const char *value) {
     }
     for (unsigned n = 0; n < parameterCount; ++n)
         if (k == controls[n].id && v >= controls[n].minimum && v <= controls[n].maximum) {
+            if (!i.tool && n == 0) { i.followTrack = false; i.browsingKit = false; }
             change(n, v);
             return;
         }
@@ -842,6 +896,12 @@ int get(void *object, const char *key, char *out, int capacity) {
     std::string value;
     if (k == "status")
         value = i.status;
+    else if (!i.tool && k == "fast_pads")
+        value = i.fastPads ? "1" : "0";
+    else if (k == "editor_instance")
+        value = "sc" + std::to_string(i.editorId);
+    else if (k == "edit_target")
+        value = std::to_string(i.followTrack ? -1 : i.browsingKit ? i.melodicPart : i.values[0]);
     else if (k == "module_id")
         value = i.tool ? "sound-canvas-midi-player" : "sound-canvas-bridge";
     else if (k == "part_lock")
@@ -924,6 +984,8 @@ void midi(void *object, const uint8_t *data, int count, int source) {
         return;
     if (i.tool && (source != MOVE_MIDI_SOURCE_EXTERNAL || !i.usb.load()))
         return;
+    if (!i.tool && count == 3 && (data[0] & 0xf0) == 0x90 && data[2])
+        i.incomingChannel = data[0] & 15;
     if (i.tool && i.playing && i.renderFirst)
         return;
     auto &stream = source == MOVE_MIDI_SOURCE_EXTERNAL ? i.external : i.internal;

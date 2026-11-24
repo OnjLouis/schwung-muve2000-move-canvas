@@ -4,13 +4,13 @@ The release archive includes runnable ARM64 modules. Building from source requir
 
 ## Muve2000
 
-Use a clean working copy of the S-MU2000 fork at the revision shown below. For the player, apply `Swp30Move.patch` and then `MoveMidiOnly.patch` from `Muve2000/Schwung` to the engine tree. The patches specialize MIDI-only rendering for Move. [Pinned S-MU2000 engine](https://github.com/OnjLouis/mu2026-smu-engine/tree/5ed88bf2afd9c4aae83b3cc123c26be6691e40b9)
+Use a clean working copy of the S-MU2000 fork at the revision shown below. For both the generator and the player, apply `Swp30Move.patch` and then `MoveMidiOnly.patch` from `Muve2000/Schwung` to the engine tree. The patches specialize MIDI-only rendering for Move. [Pinned S-MU2000 engine](https://github.com/OnjLouis/mu2026-smu-engine/tree/5ed88bf2afd9c4aae83b3cc123c26be6691e40b9)
 
 ```text
 5ed88bf2afd9c4aae83b3cc123c26be6691e40b9
 ```
 
-Configure CMake with source directory `Muve2000/Schwung`, an out-of-tree build directory, `SMU_SOURCE` set to the engine checkout and `SCHWUNG_INCLUDE` to the host header directory. The supplied Windows-hosted Zig toolchain file takes `ZIG` and `LLVM_BIN` paths. Use Release, `MU2000_THREADED_ENGINE=ON` and `MU2000_ABI_PROBE=OFF` for the player. The tested player used Zig 0.15.2, ThinLTO, `-fno-semantic-interposition` and `-ffp-contract=off`. Build target `mu2000-midi-player`. The standalone generator target is `mu2000`; the first bundle carries its previously tested DSP. Keep each target's `dsp.so` alongside its own manifest, UI and help files.
+Configure CMake with source directory `Muve2000/Schwung`, an out-of-tree build directory, `SMU_SOURCE` set to the engine checkout and `SCHWUNG_INCLUDE` to the host header directory. The supplied Windows-hosted Zig toolchain file takes `ZIG` and `LLVM_BIN` paths. Use Release, `MU2000_THREADED_ENGINE=ON` and `MU2000_ABI_PROBE=OFF` for the player. The tested player used Zig 0.15.2, ThinLTO, `-fno-semantic-interposition` and `-ffp-contract=off`. Build target `mu2000-midi-player`. For the live generator, use a separate Release build directory with `MU2000_THREADED_ENGINE=OFF`, `MU2000_RENDER_AHEAD=6` and the same optimization flags. Build target `mu2000`. The Fast setting uses three of those six blocks. Keep each target's `dsp.so` alongside its own manifest, UI and help files.
 
 ## Move Canvas
 

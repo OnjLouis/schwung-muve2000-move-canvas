@@ -2,7 +2,7 @@
   "id": "mu2000-midi-player",
   "name": "Muve2000 MIDI Player",
   "abbrev": "Muve2K MIDI",
-  "version": "0.1.10",
+  "version": "0.1.11",
   "description": "Play MIDI files using four ports of S-MU2000.",
   "author": "OnjMusic",
   "license": "BSD-3-Clause",

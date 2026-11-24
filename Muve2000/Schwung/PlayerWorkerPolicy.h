@@ -1,6 +1,6 @@
 #pragma once
 
-#if defined(__linux__) && defined(MU2000_PLAYER)
+#if defined(__linux__)
 #include <cstdlib>
 #include <pthread.h>
 #include <string_view>

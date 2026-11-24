@@ -63,17 +63,42 @@ int helperMain(int argc, char** argv) {
         }
         return true;
     };
+#ifdef SCBRIDGE_MOVE_GUEST
+    bool compact = false;
+#else
+    constexpr bool compact = false;
+#endif
     auto replyToParent=[&](char reply) {
         if(!transfer(response,&reply,1,true)) return false;
         if(reply=='R') return true;
-        return transfer(response,shared,offsetof(Shared,events),true) &&
-            transfer(response,shared->left,shared->frames*sizeof(float),true) &&
+#ifdef SCBRIDGE_MOVE_GUEST
+        if (compact) {
+            std::array<float,maxFrames*2> audio;
+            const size_t bytes = shared->frames * sizeof(float);
+            std::memcpy(audio.data(),shared->left,bytes);
+            std::memcpy(audio.data()+shared->frames,shared->right,bytes);
+            return transfer(response,audio.data(),bytes*2,true);
+        }
+#endif
+        if (!transfer(response,shared,offsetof(Shared,events),true)) return false;
+        return transfer(response,shared->left,shared->frames*sizeof(float),true) &&
             transfer(response,shared->right,shared->frames*sizeof(float),true);
     };
     auto readCommand=[&](char& command) {
         if(!transfer(request,&command,1,false)) return false;
         if(command=='Q') return true;
-        if(!transfer(request,shared,offsetof(Shared,events),false) || shared->frames>maxFrames ||
+#ifdef SCBRIDGE_MOVE_GUEST
+        compact = command == 'L';
+        if (compact) {
+            RenderCounts counts{};
+            if (!transfer(request,&counts,sizeof counts,false)) return false;
+            shared->frames=counts.frames; shared->eventCount=counts.eventCount; shared->midiBytes=counts.midiBytes;
+            shared->reset=shared->restoreSceneValid=shared->stateEpoch=0;
+            command='P';
+        }
+#endif
+        if (!compact && !transfer(request,shared,offsetof(Shared,events),false)) return false;
+        if(shared->frames>maxFrames ||
             shared->eventCount>maxEvents || shared->midiBytes>maxMidiBytes) return false;
         if(command=='S') std::fprintf(stderr,"Guest S header version=%u frames=%u reset=%u\n",shared->version,shared->frames,shared->reset);
         return transfer(request,shared->events,shared->eventCount*sizeof(Event),false) &&
@@ -89,6 +114,7 @@ int helperMain(int argc, char** argv) {
     if (argc != 2) return 2;
     pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     using namespace scbridge;
+    constexpr bool compact = false;
     auto* shared = static_cast<Shared*>(mmap(nullptr, sizeof(Shared), PROT_READ | PROT_WRITE, MAP_SHARED, 4, 0));
     if (shared == MAP_FAILED) return 3;
     void* library = dlopen(argv[1], RTLD_NOW | RTLD_LOCAL);
@@ -272,20 +298,25 @@ int helperMain(int argc, char** argv) {
                 if (rendered < shared->frames)
                     render(shared->left + rendered, shared->right + rendered, shared->frames - rendered);
             } else if(advancedCommandsPending) render(shared->left,shared->right,512);
-            mirror.snapshot(part,p,shared->reported);
-            for(unsigned i=legacyParameterCount;i<parameterCount;++i) {
-                const int actual=advancedReady ? coreState.read(i,part,p[drumNoteIndex],p[drumSetupIndex],p[insertionSelectorIndex]) : -1;
-                shared->reported[i]=actual>=0 ? actual : p[i];
-            }
 #ifdef SCBRIDGE_MOVE_GUEST
-            // The Move host requests a full 16-part state snapshot after edits
-            // and periodically while playing. The other blocks only need audio.
-            if (command == 'P' && !shared->stateEpoch) shared->capturedSceneValid=0;
-            else
+            if (command == 'S') shared->stateEpoch=compactRenderCapability;
 #endif
-            {
-                mirror.capture(shared->capturedScene);
-                shared->capturedSceneValid=advancedReady && coreState.capture(shared->capturedScene) && validScene(shared->capturedScene) ? 1 : 0;
+            if (!compact) {
+                mirror.snapshot(part,p,shared->reported);
+                for(unsigned i=legacyParameterCount;i<parameterCount;++i) {
+                    const int actual=advancedReady ? coreState.read(i,part,p[drumNoteIndex],p[drumSetupIndex],p[insertionSelectorIndex]) : -1;
+                    shared->reported[i]=actual>=0 ? actual : p[i];
+                }
+#ifdef SCBRIDGE_MOVE_GUEST
+                // The Move host requests a full 16-part state snapshot after edits
+                // and periodically while playing. The other blocks only need audio.
+                if (command == 'P' && !shared->stateEpoch) shared->capturedSceneValid=0;
+                else
+#endif
+                {
+                    mirror.capture(shared->capturedScene);
+                    shared->capturedSceneValid=advancedReady && coreState.capture(shared->capturedScene) && validScene(shared->capturedScene) ? 1 : 0;
+                }
             }
             shared->result = 0;
             if(interval) audioThreadPolicy(2,0,0);

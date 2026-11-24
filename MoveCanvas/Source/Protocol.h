@@ -8,6 +8,9 @@ constexpr uint32_t protocolVersion = 8;
 constexpr uint32_t maxFrames = 4096;
 constexpr uint32_t maxEvents = 1024;
 constexpr uint32_t maxMidiBytes = 65536;
+// Returned by the Move guest on setup when it accepts compact note-only blocks.
+constexpr uint32_t compactRenderCapability = 0x53434c31;
+struct RenderCounts { uint32_t frames, eventCount, midiBytes; };
 struct Event { uint32_t offset, size, position; };
 struct Shared {
     uint32_t version, frames, eventCount, midiBytes, reset, result;

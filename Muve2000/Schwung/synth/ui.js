@@ -2,134 +2,150 @@ import { decodeDelta, decodeAcceleratedDelta, isCapacitiveTouchMessage } from '/
 import { drawMenuHeader, drawMenuList, drawMenuFooter, menuLayoutDefaults } from '/data/UserData/schwung/shared/menu_layout.mjs';
 import { announce } from '/data/UserData/schwung/shared/screen_reader.mjs';
 
-const fields = [['program', 'Patch', 127], ['part', 'Part', 63], ['bank', 'Bank MSB', 127], ['lsb', 'Bank LSB', 127], ['octave', 'Octave', 4, -4]];
 const knobs = [['volume', 'Volume'], ['pan', 'Pan'], ['cutoff', 'Cutoff'], ['resonance', 'Resonance'],
     ['attack', 'Attack'], ['release', 'Release'], ['reverb', 'Reverb Send'], ['chorus', 'Chorus Send']];
-const knobCC = 71;
-const groups = [['Instruments', 0], ['Drums', 127], ['SFX Kits', 126], ['Bank Variations'], ['Settings']];
-let browser = '', group = 0;
-let selected = 0, editing = false, previous = '', redraw = true, lastKnob = -1, lastTurn = 0;
-function value(field) {
-    const n = Number(host_module_get_param(field[0]));
-    return Number.isFinite(n) ? n : 0;
-}
-function display(field) {
-    const n = value(field);
-    if (field[0] === 'program') return patchLabel();
-    if (field[0] === 'part') return String.fromCharCode(65 + Math.floor(n / 16)) + (n % 16 + 1);
-    return String(n);
-}
-function patchLabel() { return String(host_module_get_param('patch_name') || 'Program ' + (value(fields[0]) + 1)); }
-function speak() {
-    const field = fields[selected], n = value(field);
-    const text = field[0] === 'octave' && n !== 0 ? (n < 0 ? 'minus ' : 'plus ') + Math.abs(n) : display(field);
-    announce(field[1] + ', ' + text);
-}
-function init() { selected = 0; editing = false; browser = ''; group = 0; previous = ''; redraw = true; lastKnob = -1; lastTurn = 0; }
-function tick() {
-    const status = String(host_module_get_param('status') || 'Starting Muve2000.').replace('Starting MU2000.', 'Starting Muve2000.');
-    if (status !== previous) { previous = status; announce(status); redraw = true; }
-    if (!redraw) return;
-    redraw = false;
-    clear_screen();
-    drawMenuHeader('Muve2000', editing ? 'EDIT' : '');
-    if (status !== 'Ready.') {
-        print(2, 20, status.slice(0, 21), 1);
-        print(2, 31, status.slice(21, 42), 1);
-        if (typeof host_flush_display === 'function') host_flush_display();
-        return;
+const get = key => String(host_module_get_param(key) ?? '');
+const set = (key, value) => host_module_set_param(key, String(value));
+const num = key => Number(get(key)) || 0;
+const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
+const partName = part => String.fromCharCode(65 + Math.floor(part / 16)) + (part % 16 + 1);
+let pages, editing, shift, dirty, status, ticks, lastKnob, lastTurn;
+const page = () => pages[pages.length - 1];
+const item = () => page().rows[page().index];
+// The highlighted track can differ from the slot whose editor is open.
+let editorSlot = -1, lastChannel;
+function syncTrack() {
+    if (typeof shadow_get_slots !== 'function' || typeof shadow_get_param !== 'function') return;
+    const slots = shadow_get_slots();
+    if (!slots) return;
+    if (editorSlot < 0) {
+        const id = get('editor_instance');
+        if (!id) return;
+        editorSlot = slots.findIndex((_, i) => shadow_get_param(i, 'synth:editor_instance') === id);
     }
-    const isGroups = browser === 'groups';
-    drawMenuList({
-        items: isGroups ? groups : fields, selectedIndex: isGroups ? group : selected,
-        listArea: { topY: menuLayoutDefaults.listTopY, bottomY: menuLayoutDefaults.listBottomWithFooter },
-        getLabel: field => field[isGroups ? 0 : 1], getValue: isGroups ? () => '' : display, valueAlignRight: true, announce: false
-    });
-    drawMenuFooter(isGroups ? 'Jog:select Click:open' : browser === 'variation' ? 'Jog:bank Click:done'
-        : editing ? 'Jog:change Click:done' : selected ? 'Jog:select Click:edit' : 'Jog:patch Click:browse');
+    if (editorSlot < 0 || !slots[editorSlot]) return;
+    const forward = shadow_get_param(editorSlot, 'slot:forward_channel');
+    if (forward == null || forward === '') return;
+    const channel = Number(forward) >= 0 ? Number(forward) : Number(slots[editorSlot].channel) - 1;
+    if (Number.isInteger(channel) && channel >= -1 && channel < 16 && channel !== lastChannel) {
+        if (set('track_channel', channel) !== false) lastChannel = channel;
+    }
+}
+
+function say() {
+    const r = item(), value = r.value?.();
+    announce(r.name + (value ? ', ' + value : ''));
+}
+function open(title, rows, index = 0) {
+    const child = pages.length > 0;
+    if (child) rows.unshift({name:'Back', run:back});
+    pages.push({title, rows, index:child && rows.length > 1 ? index + 1 : 0});
+    editing = false; dirty = true;
+    say();
+}
+function back() {
+    if (editing) editing = false;
+    else if (pages.length > 1) pages.pop();
+    dirty = true; say();
+}
+function catalogue(title, group, variations = false) {
+    if (!variations) set('group', group);
+    const bank = num('bank'), lsb = num('lsb'), pc = num('program');
+    const current = variations ? (bank << 14 | lsb << 7 | pc) : pc;
+    const key = variations ? 'variation_rows:' : 'patch_rows:';
+    const rows = [];
+    for (let start = 0; ; start += 8) {
+        const lines = get(key + start).trimEnd().split('\n');
+        const more = lines[lines.length - 1] === '+';
+        if (more) lines.pop();
+        for (const line of lines) {
+            const split = line.indexOf('\t');
+            if (split < 1) continue;
+            const id = Number(line.slice(0, split));
+            rows.push({id, name:line.slice(split + 1), preview:() => set(variations ? 'voice_address' : 'program', id), run:back});
+        }
+        if (!more) break;
+    }
+    const index = Math.max(0, rows.findIndex(r => r.id === current));
+    if (rows[index] && rows[index].id !== current) rows[index].preview();
+    open(title, rows, index);
+}
+function field(name, key, lo, hi, format = String) {
+    return {name, value:() => format(num(key)), step:delta => set(key, clamp(num(key) + delta, lo, hi))};
+}
+function settings() {
+    open('Settings', [
+        field('Edit part','edit_target',-1,63,p => p < 0 ? 'Follow track, ' + partName(num('part')) : partName(p)),
+        field('Bank MSB','bank',0,127), field('Bank LSB','lsb',0,127),
+        field('Octave','octave',-4,4,n => n < 0 ? 'minus ' + (-n) : n > 0 ? 'plus ' + n : '0'),
+        field('Pad response','fast_pads',0,1,n => n ? 'Fast' : 'Buffered')
+    ]);
+}
+function init() {
+    pages=[]; editing=shift=false; dirty=true; status=''; ticks=0; lastKnob=-1; lastTurn=0;
+    editorSlot=-1; lastChannel=undefined; syncTrack();
+    open('Muve2000', [
+        {name:'Instruments',run:() => catalogue('Instruments',0)},
+        {name:'Drums',run:() => catalogue('Drums',127)},
+        {name:'SFX Kits',run:() => catalogue('SFX Kits',126)},
+        {name:'Bank Variations',run:() => catalogue('Bank Variations',0,true)},
+        {name:'Settings',run:settings}
+    ]);
+}
+function tick() {
+    if (!pages) init();
+    if (!(ticks++ % 16)) {
+        syncTrack();
+        const next = get('status');
+        if (next !== status) {
+            status=next; dirty=true;
+            if (next === 'Ready.') say(); else if (next) announce(next);
+        }
+    }
+    if (!dirty) return;
+    dirty=false; clear_screen();
+    drawMenuHeader(page().title, editing ? 'EDIT' : partName(num('part')));
+    if (status !== 'Ready.') { print(2,20,status.slice(0,21),1); print(2,31,status.slice(21,42),1); }
+    else {
+        drawMenuList({items:page().rows, selectedIndex:page().index,
+            listArea:{topY:menuLayoutDefaults.listTopY,bottomY:menuLayoutDefaults.listBottomWithFooter},
+            getLabel:r=>r.name, getValue:r=>r.value?.() || '', valueAlignRight:true, announce:false});
+        drawMenuFooter(editing ? 'Jog edit, Click done' : item().preview ? 'Jog sound, Click done' : 'Jog move, Click open');
+    }
     if (typeof host_flush_display === 'function') host_flush_display();
 }
 function onMidiMessageInternal(data) {
-    if (!data || data.length < 3 || previous !== 'Ready.') return;
-    const status = data[0] & 240, cc = data[1], v = data[2];
-    const touch = status === 144 && v > 0 && cc < knobs.length;
-    const turn = status === 176 && cc >= knobCC && cc < knobCC + knobs.length;
+    if (!pages || !data || data.length < 3) return;
+    const type=data[0]&240, cc=data[1], v=data[2];
+    if (type===176 && cc===49) {shift=!!v;return;}
+    if (status !== 'Ready.') return;
+    const touch=type===144 && v && cc<8, turn=type===176 && cc>=71 && cc<79;
     if (touch || turn) {
-        const index = touch ? cc : cc - knobCC;
-        const knob = knobs[index], d = turn ? decodeAcceleratedDelta(v, cc) : 0;
-        if (turn && !d) return;
-        if (turn) host_module_set_param('step:' + knob[0], String(d));
-        const now = Date.now();
-        const name = touch || index !== lastKnob || now - lastTurn > 1500 ? knob[1] + ', ' : '';
-        announce(name + value(knob));
-        lastKnob = index;
-        lastTurn = now;
-        return;
+        const index=touch ? cc : cc-71, [key,name]=knobs[index];
+        if (turn) set('step:'+key,decodeAcceleratedDelta(v,cc));
+        const now=Date.now();
+        announce((touch || index!==lastKnob || now-lastTurn>1500 ? name+', ' : '')+num(key));
+        lastKnob=index;lastTurn=now;dirty=true;return;
     }
-    if (isCapacitiveTouchMessage(data) || status !== 176) return;
-    if (browser) {
-        if ((cc === 50 || cc === 3) && v) {
-            if (cc === 50 || browser === 'variation') {
-                browser = '';
-                announce(patchLabel());
-            } else {
-                const [label, bank] = groups[group];
-                if (label === 'Settings') { browser = ''; selected = 1; speak(); }
-                else if (label === 'Bank Variations') {
-                    browser = 'variation';
-                    announce(label + ', ' + patchLabel());
-                } else {
-                    host_module_set_param('group', String(bank));
-                    browser = '';
-                    announce(label + ', ' + patchLabel());
-                }
-            }
-            redraw = true;
-        } else if (cc === 14) {
-            const d = decodeDelta(v);
-            if (!d) return;
-            if (browser === 'groups') {
-                group = ((group + d) % groups.length + groups.length) % groups.length;
-                announce(groups[group][0]);
-            } else {
-                host_module_set_param('variation', String(d));
-                announce(patchLabel() + ', bank ' + value(fields[2]) + ', ' + value(fields[3]));
-            }
-            redraw = true;
+    if(type!==176 || isCapacitiveTouchMessage(data)) return;
+    if(cc===50 && v || cc===3 && v && shift) {back();return;}
+    if(cc===3 && v) {
+        if(item().step) {editing=!editing;say();}
+        else item().run();
+    } else if(cc===14) {
+        const delta=decodeDelta(v);
+        if(!delta) return;
+        if(editing) item().step(delta);
+        else {
+            const next=clamp(page().index+delta,0,page().rows.length-1);
+            if(next===page().index) return;
+            page().index=next;
+            item().preview?.();
         }
-        return;
-    }
-    if (cc === 50 && v) {
-        selected = selected === 0 ? 1 : 0;
-        editing = false;
-        speak();
-        redraw = true;
-    } else if (cc === 3 && v) {
-        if (selected === 0) {
-            browser = 'groups';
-            const bank = value(fields[2]);
-            group = bank === 127 ? 1 : bank === 126 ? 2 : 0;
-            announce('Browse, ' + groups[group][0]);
-        } else { editing = !editing; speak(); }
-        redraw = true;
-    } else if (cc === 14) {
-        const d = decodeDelta(v);
-        if (!d) return;
-        if (selected === 0) {
-            host_module_set_param('browse', String(d));
-            announce(patchLabel());
-        } else if (editing) {
-            const field = fields[selected];
-            const next = Math.max(field[3] || 0, Math.min(field[2], value(field) + d));
-            host_module_set_param(field[0], String(next));
-            if (field[0] === 'part') announce(field[1] + ', ' + String.fromCharCode(65 + Math.floor(next / 16)) + (next % 16 + 1));
-            else if (field[0] === 'octave' && next !== 0) announce(field[1] + ', ' + (next < 0 ? 'minus ' : 'plus ') + Math.abs(next));
-            else announce(field[1] + ', ' + next);
-        } else { selected = 1 + ((selected - 1 + d) % (fields.length - 1) + fields.length - 1) % (fields.length - 1); speak(); }
-        redraw = true;
-    }
+        say();
+    } else return;
+    dirty=true;
 }
 function onMidiMessageExternal() {}
-
-Object.assign(globalThis, { init, tick, onMidiMessageInternal, onMidiMessageExternal });
-globalThis.chain_ui = { init, tick, onMidiMessageInternal, onMidiMessageExternal };
+Object.assign(globalThis,{init,tick,onMidiMessageInternal,onMidiMessageExternal});
+globalThis.chain_ui={init,tick,onMidiMessageInternal,onMidiMessageExternal};

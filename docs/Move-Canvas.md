@@ -2,15 +2,21 @@
 
 ## Choose a sound
 
-Load **Move Canvas** in a Schwung generator slot. Open **Preset bank**, choose **SC-55**, **SC-88**, **SC-88 Pro** or **SC-8820**, then choose **Programs**, an instrument family and a sound. The bank has 2,958 named entries across the four maps. A familiar name can have a different sound on another map.
+Open **Preset bank** to go straight to the current sound on the current map. Opening the list preserves your patch and its edits. Turn Jog while playing to audition neighbouring presets. Click the sound to return to the menu. When you reopen the bank, focus returns to the playing preset.
 
-**To play drums from a keyboard sending channel 3**, choose a map and open **Drum kits** in its preset bank. Select a kit. This selects part 10. Open **Part and program** and set **Keyboard Routing** to **Selected part**. Play the keyboard. If you leave routing on **Multitimbral**, send your drums on channel 10. With that routing, channel 3 continues playing the voice assigned to part 3.
+For a shorter list, open **Instrument families** or **Drum kits** from the main menu. Opening a family or the kit list preserves the playing sound until you turn to a sound or click one. The **Back** row returns to the parent menu. To switch between SC-55, SC-88, SC-88 Pro and SC-8820, use **Part and program → Sound Map**. The full catalogue has 2,958 entries across those four maps.
+
+**Part and program → Edit part** defaults to **Follow track**. A slot receiving channel 3 edits part 3 as soon as you open the editor. A fixed forward channel takes priority. On an Omni slot without a fixed forward channel, play a note to select the part. You can also choose a fixed part yourself.
+
+**To play drums on channel 3**, open **Drum kits** and choose a kit. The generator selects part 10 for the kit. New instances use **Selected part** keyboard routing, so the same pads can play drums. Browsing a melodic sound returns to the track part. For an older saved instance, choose **Part and program → Keyboard Routing → Selected part** to get this behaviour. **Multitimbral** keeps the incoming channels separate and uses channel 10 for drums.
 
 ## Edit the sound
 
 Turn **Jog** to an edit page and click to open it. Touch an encoder to hear its parameter and value. Turn it to change that value. You can also jog to a parameter, click to edit, turn Jog, then click to finish. **Menu** moves back one level.
 
 The main knobs control volume, pan, brightness, resonance, attack, release, reverb send and chorus send. Other pages cover tuning, envelopes, master controls, reverb, chorus, delay, equalizer, individual drum notes and insertion effects. The effect pages expose all 20 insertion parameters. Use **All notes off** if a note hangs.
+
+**Part and program → Pad response** starts on **Fast** for live playing. Choose **Buffered** for more headroom if you hear crackling on a busy patch. The generator remembers this setting with the set. The MIDI file player uses its own playback buffer.
 
 ## Play a MIDI file
 

@@ -5,6 +5,7 @@
 #include <cerrno>
 #include <chrono>
 #include <csignal>
+#include <cstring>
 #include <filesystem>
 #include <fcntl.h>
 #include <poll.h>
@@ -23,6 +24,7 @@ class Engine {
     std::filesystem::path folder;
     int request = -1, response = -1;
     int runtimeLock = -1;
+    bool compactSupported = false;
     pid_t child = -1;
     const std::atomic<bool> &stopping;
 
@@ -113,20 +115,44 @@ class Engine {
         char ready = 0;
         return transfer(response, &ready, 1, false, Clock::now() + std::chrono::seconds(45)) && ready == 'R';
     }
-    bool render(char command) {
+    bool render(char command, bool notesOnly = false) {
         const auto deadline = Clock::now() + std::chrono::seconds(command == 'S' ? 30 : 4);
         constexpr size_t header = offsetof(Shared, events);
         const unsigned frames = packet.frames;
         char reply = 0;
-        return transfer(request, &command, 1, true, deadline) &&
-               transfer(request, &packet, header, true, deadline) &&
-               transfer(request, packet.events, packet.eventCount * sizeof(Event), true, deadline) &&
-               transfer(request, packet.midi, packet.midiBytes, true, deadline) &&
+        const bool compact = command == 'P' && notesOnly && compactSupported;
+        char wireCommand = compact ? 'L' : command;
+        RenderCounts counts{frames, packet.eventCount, packet.midiBytes};
+        if (compact) packet.capturedSceneValid = 0;
+        // The common pad packet fits in one FIFO write, including its notes.
+        unsigned char padPacket[1024];
+        const auto eventsSize = packet.eventCount * sizeof(Event);
+        const auto compactSize = 1 + sizeof counts + eventsSize + packet.midiBytes;
+        bool sent;
+        if (compact && compactSize <= sizeof padPacket) {
+            padPacket[0] = wireCommand;
+            auto cursor = padPacket + 1;
+            std::memcpy(cursor, &counts, sizeof counts);
+            cursor += sizeof counts;
+            std::memcpy(cursor, packet.events, eventsSize);
+            cursor += eventsSize;
+            std::memcpy(cursor, packet.midi, packet.midiBytes);
+            sent = transfer(request, padPacket, compactSize, true, deadline);
+        } else {
+            sent = transfer(request, &wireCommand, 1, true, deadline) &&
+                   (compact ? transfer(request, &counts, sizeof counts, true, deadline)
+                            : transfer(request, &packet, header, true, deadline)) &&
+                   transfer(request, packet.events, eventsSize, true, deadline) &&
+                   transfer(request, packet.midi, packet.midiBytes, true, deadline);
+        }
+        const bool ok = sent &&
                transfer(response, &reply, 1, false, deadline) && reply == 'D' &&
-               transfer(response, &packet, header, false, deadline) && packet.result == 0 &&
-               packet.frames == frames &&
+               (compact || (transfer(response, &packet, header, false, deadline) &&
+                            packet.result == 0 && packet.frames == frames)) &&
                transfer(response, packet.left, frames * sizeof(float), false, deadline) &&
                transfer(response, packet.right, frames * sizeof(float), false, deadline);
+        if (command == 'S') compactSupported = ok && packet.stateEpoch == compactRenderCapability;
+        return ok;
     }
     ~Engine() {
         if (child > 0) {

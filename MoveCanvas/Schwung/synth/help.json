@@ -4,23 +4,26 @@
     {
       "title": "Preset bank",
       "lines": [
-        "Open Preset bank.",
-        "Choose a sound map.",
-        "For an instrument",
-        "choose Programs, a",
-        "family and a sound."
+        "Open Preset bank at",
+        "the current sound.",
+        "Turn Jog to audition.",
+        "Click to keep it and",
+        "go back. For another",
+        "map, open Part and",
+        "program, then Sound",
+        "Map."
       ]
     },
     {
       "title": "Drums on channel 3",
       "lines": [
-        "Choose a drum kit.",
-        "This selects part 10.",
-        "In Part and program",
-        "set Keyboard Routing",
-        "to Selected part. You",
-        "can now play drums on",
-        "channel 3."
+        "Choose Drum kits and",
+        "turn Jog to a kit.",
+        "Selected part routing",
+        "plays it on your",
+        "pads. Browsing",
+        "instruments returns",
+        "to the track part."
       ]
     },
     {
@@ -54,6 +57,26 @@
         "player with Shift and",
         "Back. Reopen the one",
         "you want."
+      ]
+    },
+    {
+      "title": "Edit part",
+      "lines": [
+        "Follow track is on by",
+        "default. Open Part",
+        "and program to choose",
+        "a fixed part."
+      ]
+    },
+    {
+      "title": "Pad response",
+      "lines": [
+        "In Part and program,",
+        "Pad response starts",
+        "on Fast for live",
+        "playing. Choose",
+        "Buffered if a busy",
+        "patch crackles."
       ]
     }
   ]
